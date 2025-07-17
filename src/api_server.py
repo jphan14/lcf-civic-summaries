@@ -294,6 +294,403 @@ def internal_error(error):
     logger.error(f"Internal server error: {str(error)}")
     return jsonify({'error': 'Internal server error'}), 500
 
+# Add this code to your src/api_server.py file in Railway
+# Insert this code before the "if __name__ == '__main__':" line
+
+@app.route('/api/test-workflow', methods=['POST', 'GET'])
+def test_workflow():
+    """Run comprehensive workflow tests via API endpoint"""
+    
+    # Only allow testing in non-production environments or when explicitly enabled
+    if config.environment == 'production' and not os.getenv('ENABLE_TESTING', 'false').lower() == 'true':
+        return jsonify({'error': 'Testing disabled in production. Set ENABLE_TESTING=true to enable.'}), 403
+    
+    try:
+        test_results = {
+            'timestamp': datetime.utcnow().isoformat(),
+            'environment': config.environment,
+            'test_summary': {
+                'total_tests': 0,
+                'passed': 0,
+                'failed': 0,
+                'warnings': 0
+            },
+            'tests': {}
+        }
+        
+        logger.info("Starting comprehensive workflow tests via API")
+        
+        # Test 1: Check Python Dependencies
+        logger.info("Test 1: Checking Python dependencies")
+        try:
+            import requests
+            import beautifulsoup4
+            import openai
+            import schedule
+            import flask
+            from flask_cors import CORS
+            
+            # Check versions
+            import pkg_resources
+            packages = ['requests', 'beautifulsoup4', 'openai', 'schedule', 'flask', 'flask-cors']
+            versions = {}
+            
+            for package in packages:
+                try:
+                    version = pkg_resources.get_distribution(package).version
+                    versions[package] = version
+                except:
+                    versions[package] = 'unknown'
+            
+            test_results['tests']['dependencies'] = {
+                'status': 'PASS',
+                'message': 'All required packages available',
+                'versions': versions
+            }
+            test_results['test_summary']['passed'] += 1
+            
+        except ImportError as e:
+            test_results['tests']['dependencies'] = {
+                'status': 'FAIL',
+                'message': f'Missing dependency: {str(e)}',
+                'error': str(e)
+            }
+            test_results['test_summary']['failed'] += 1
+        
+        test_results['test_summary']['total_tests'] += 1
+        
+        # Test 2: Check Data Directory Access
+        logger.info("Test 2: Checking data directory access")
+        try:
+            data_dir = config.data_dir
+            
+            # Test directory creation
+            os.makedirs(data_dir, exist_ok=True)
+            
+            # Test file write/read/delete
+            test_file = os.path.join(data_dir, 'workflow_test.tmp')
+            test_content = f"Test file created at {datetime.utcnow().isoformat()}"
+            
+            with open(test_file, 'w', encoding='utf-8') as f:
+                f.write(test_content)
+            
+            with open(test_file, 'r', encoding='utf-8') as f:
+                read_content = f.read()
+            
+            os.remove(test_file)
+            
+            if read_content == test_content:
+                test_results['tests']['data_directory'] = {
+                    'status': 'PASS',
+                    'message': f'Data directory accessible at {data_dir}',
+                    'path': data_dir
+                }
+                test_results['test_summary']['passed'] += 1
+            else:
+                test_results['tests']['data_directory'] = {
+                    'status': 'FAIL',
+                    'message': 'File read/write test failed',
+                    'path': data_dir
+                }
+                test_results['test_summary']['failed'] += 1
+                
+        except Exception as e:
+            test_results['tests']['data_directory'] = {
+                'status': 'FAIL',
+                'message': f'Data directory access failed: {str(e)}',
+                'error': str(e)
+            }
+            test_results['test_summary']['failed'] += 1
+        
+        test_results['test_summary']['total_tests'] += 1
+        
+        # Test 3: Check Environment Variables
+        logger.info("Test 3: Checking environment variables")
+        required_vars = {
+            'OPENAI_API_KEY': 'OpenAI API access',
+            'SMTP_USERNAME': 'Email notifications',
+            'SMTP_PASSWORD': 'Email authentication',
+            'EMAIL_FROM': 'Email sender',
+            'EMAIL_TO': 'Email recipient'
+        }
+        
+        optional_vars = {
+            'OPENAI_MODEL': 'AI model selection',
+            'MAX_TOKENS': 'AI response length',
+            'SCHEDULE_TIME': 'Job scheduling',
+            'SCHEDULE_DAY': 'Job scheduling'
+        }
+        
+        env_status = {
+            'required': {},
+            'optional': {},
+            'missing_required': [],
+            'missing_optional': []
+        }
+        
+        for var, description in required_vars.items():
+            value = os.getenv(var)
+            if value:
+                env_status['required'][var] = 'configured'
+            else:
+                env_status['required'][var] = 'missing'
+                env_status['missing_required'].append(var)
+        
+        for var, description in optional_vars.items():
+            value = os.getenv(var)
+            if value:
+                env_status['optional'][var] = value
+            else:
+                env_status['optional'][var] = 'not set'
+                env_status['missing_optional'].append(var)
+        
+        if not env_status['missing_required']:
+            test_results['tests']['environment_variables'] = {
+                'status': 'PASS',
+                'message': 'All required environment variables configured',
+                'details': env_status
+            }
+            test_results['test_summary']['passed'] += 1
+        else:
+            test_results['tests']['environment_variables'] = {
+                'status': 'FAIL',
+                'message': f'Missing required variables: {env_status["missing_required"]}',
+                'details': env_status
+            }
+            test_results['test_summary']['failed'] += 1
+        
+        if env_status['missing_optional']:
+            test_results['test_summary']['warnings'] += 1
+        
+        test_results['test_summary']['total_tests'] += 1
+        
+        # Test 4: Check OpenAI API Connection
+        logger.info("Test 4: Checking OpenAI API connection")
+        if os.getenv('OPENAI_API_KEY'):
+            try:
+                import openai
+                
+                # Try to initialize OpenAI client
+                try:
+                    client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+                    # Test with a minimal API call
+                    response = client.chat.completions.create(
+                        model=os.getenv('OPENAI_MODEL', 'gpt-3.5-turbo'),
+                        messages=[{"role": "user", "content": "Test"}],
+                        max_tokens=5
+                    )
+                    
+                    test_results['tests']['openai_api'] = {
+                        'status': 'PASS',
+                        'message': 'OpenAI API connection successful',
+                        'model': os.getenv('OPENAI_MODEL', 'gpt-3.5-turbo')
+                    }
+                    test_results['test_summary']['passed'] += 1
+                    
+                except Exception as api_error:
+                    test_results['tests']['openai_api'] = {
+                        'status': 'FAIL',
+                        'message': f'OpenAI API call failed: {str(api_error)}',
+                        'error': str(api_error)
+                    }
+                    test_results['test_summary']['failed'] += 1
+                    
+            except ImportError:
+                test_results['tests']['openai_api'] = {
+                    'status': 'FAIL',
+                    'message': 'OpenAI library not available',
+                    'error': 'Import error'
+                }
+                test_results['test_summary']['failed'] += 1
+        else:
+            test_results['tests']['openai_api'] = {
+                'status': 'SKIP',
+                'message': 'OpenAI API key not configured',
+                'note': 'Set OPENAI_API_KEY to test AI functionality'
+            }
+            test_results['test_summary']['warnings'] += 1
+        
+        test_results['test_summary']['total_tests'] += 1
+        
+        # Test 5: Check API Endpoints
+        logger.info("Test 5: Checking internal API endpoints")
+        try:
+            # Test health endpoint internally
+            with app.test_client() as client:
+                health_response = client.get('/api/health')
+                summaries_response = client.get('/api/summaries')
+                bodies_response = client.get('/api/government-bodies')
+                
+                endpoint_tests = {
+                    '/api/health': health_response.status_code == 200,
+                    '/api/summaries': summaries_response.status_code == 200,
+                    '/api/government-bodies': bodies_response.status_code == 200
+                }
+                
+                failed_endpoints = [ep for ep, success in endpoint_tests.items() if not success]
+                
+                if not failed_endpoints:
+                    test_results['tests']['api_endpoints'] = {
+                        'status': 'PASS',
+                        'message': 'All API endpoints responding correctly',
+                        'endpoints_tested': list(endpoint_tests.keys())
+                    }
+                    test_results['test_summary']['passed'] += 1
+                else:
+                    test_results['tests']['api_endpoints'] = {
+                        'status': 'FAIL',
+                        'message': f'Failed endpoints: {failed_endpoints}',
+                        'details': endpoint_tests
+                    }
+                    test_results['test_summary']['failed'] += 1
+                    
+        except Exception as e:
+            test_results['tests']['api_endpoints'] = {
+                'status': 'FAIL',
+                'message': f'API endpoint testing failed: {str(e)}',
+                'error': str(e)
+            }
+            test_results['test_summary']['failed'] += 1
+        
+        test_results['test_summary']['total_tests'] += 1
+        
+        # Test 6: Check Email Configuration
+        logger.info("Test 6: Checking email configuration")
+        email_vars = ['SMTP_USERNAME', 'SMTP_PASSWORD', 'EMAIL_FROM', 'EMAIL_TO']
+        email_configured = all(os.getenv(var) for var in email_vars)
+        
+        if email_configured:
+            try:
+                import smtplib
+                from email.mime.text import MIMEText
+                
+                # Test SMTP connection (don't send actual email)
+                smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
+                smtp_port = int(os.getenv('SMTP_PORT', '587'))
+                
+                server = smtplib.SMTP(smtp_server, smtp_port)
+                server.starttls()
+                server.login(os.getenv('SMTP_USERNAME'), os.getenv('SMTP_PASSWORD'))
+                server.quit()
+                
+                test_results['tests']['email_configuration'] = {
+                    'status': 'PASS',
+                    'message': 'Email configuration valid and SMTP connection successful',
+                    'smtp_server': smtp_server,
+                    'smtp_port': smtp_port
+                }
+                test_results['test_summary']['passed'] += 1
+                
+            except Exception as e:
+                test_results['tests']['email_configuration'] = {
+                    'status': 'FAIL',
+                    'message': f'Email configuration test failed: {str(e)}',
+                    'error': str(e)
+                }
+                test_results['test_summary']['failed'] += 1
+        else:
+            missing_email_vars = [var for var in email_vars if not os.getenv(var)]
+            test_results['tests']['email_configuration'] = {
+                'status': 'SKIP',
+                'message': f'Email not configured. Missing: {missing_email_vars}',
+                'note': 'Configure email variables to enable notifications'
+            }
+            test_results['test_summary']['warnings'] += 1
+        
+        test_results['test_summary']['total_tests'] += 1
+        
+        # Test 7: Test Document Processing Functions
+        logger.info("Test 7: Testing document processing functions")
+        try:
+            # Test if we can import the processing modules
+            from fetch_all_meetings import RailwayMeetingsFetcher
+            from summarize_all_meetings import RailwaySummarizer
+            from update_website_data import RailwayWebsiteUpdater
+            
+            # Test basic initialization
+            fetcher = RailwayMeetingsFetcher()
+            summarizer = RailwaySummarizer()
+            updater = RailwayWebsiteUpdater()
+            
+            test_results['tests']['processing_modules'] = {
+                'status': 'PASS',
+                'message': 'All processing modules imported and initialized successfully',
+                'modules': ['fetch_all_meetings', 'summarize_all_meetings', 'update_website_data']
+            }
+            test_results['test_summary']['passed'] += 1
+            
+        except ImportError as e:
+            test_results['tests']['processing_modules'] = {
+                'status': 'FAIL',
+                'message': f'Failed to import processing modules: {str(e)}',
+                'error': str(e)
+            }
+            test_results['test_summary']['failed'] += 1
+        except Exception as e:
+            test_results['tests']['processing_modules'] = {
+                'status': 'FAIL',
+                'message': f'Failed to initialize processing modules: {str(e)}',
+                'error': str(e)
+            }
+            test_results['test_summary']['failed'] += 1
+        
+        test_results['test_summary']['total_tests'] += 1
+        
+        # Calculate overall status
+        if test_results['test_summary']['failed'] == 0:
+            if test_results['test_summary']['warnings'] == 0:
+                overall_status = 'ALL_PASS'
+                status_message = 'All tests passed successfully!'
+            else:
+                overall_status = 'PASS_WITH_WARNINGS'
+                status_message = f'Tests passed with {test_results["test_summary"]["warnings"]} warnings'
+        else:
+            overall_status = 'SOME_FAILURES'
+            status_message = f'{test_results["test_summary"]["failed"]} tests failed'
+        
+        test_results['overall_status'] = overall_status
+        test_results['status_message'] = status_message
+        
+        logger.info(f"Workflow tests completed: {status_message}")
+        
+        # Return appropriate HTTP status
+        if overall_status == 'ALL_PASS':
+            return jsonify(test_results), 200
+        elif overall_status == 'PASS_WITH_WARNINGS':
+            return jsonify(test_results), 200
+        else:
+            return jsonify(test_results), 206  # Partial Content
+            
+    except Exception as e:
+        logger.error(f"Test workflow execution failed: {str(e)}")
+        return jsonify({
+            'error': f'Test execution failed: {str(e)}',
+            'timestamp': datetime.utcnow().isoformat(),
+            'overall_status': 'ERROR'
+        }), 500
+
+@app.route('/api/test-simple', methods=['GET'])
+def test_simple():
+    """Run a simple quick test"""
+    try:
+        simple_tests = {
+            'timestamp': datetime.utcnow().isoformat(),
+            'api_server': 'running',
+            'environment': config.environment,
+            'data_dir': config.data_dir,
+            'data_dir_exists': os.path.exists(config.data_dir),
+            'openai_configured': bool(os.getenv('OPENAI_API_KEY')),
+            'email_configured': bool(os.getenv('SMTP_USERNAME') and os.getenv('SMTP_PASSWORD'))
+        }
+        
+        return jsonify(simple_tests), 200
+        
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'timestamp': datetime.utcnow().isoformat()
+        }), 500
+
 if __name__ == '__main__':
     logger.info(f"Starting LCF Civic Summaries API Server on port {config.port}")
     logger.info(f"Environment: {config.environment}")
