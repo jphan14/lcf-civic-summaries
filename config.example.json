@@ -1,0 +1,54 @@
+{
+  "schedule_day": "monday",
+  "schedule_time": "09:00",
+  "use_ai_summaries": true,
+  "openai_api_key": "your_openai_api_key_here",
+  "openai_model": "gpt-4o-mini",
+  "max_summary_tokens": 1000,
+  "max_api_calls_per_run": 20,
+  "api_call_delay": 2,
+  
+  "send_email": false,
+  "email_from": "your_email@gmail.com",
+  "email_to": "your_email@gmail.com",
+  "smtp_server": "smtp.gmail.com",
+  "smtp_port": 587,
+  "smtp_username": "your_email@gmail.com",
+  "smtp_password": "your_app_password_here",
+  
+  "government_bodies": {
+    "City Council": {
+      "base_url": "https://lcf.ca.gov/city-clerk/agenda-minutes/",
+      "enabled": true
+    },
+    "Planning Commission": {
+      "base_url": "https://lcf.ca.gov/city-clerk/agenda-minutes/",
+      "enabled": true
+    },
+    "Design Commission": {
+      "base_url": "https://lcf.ca.gov/city-clerk/agenda-minutes/",
+      "enabled": true
+    },
+    "Public Safety Commission": {
+      "base_url": "https://lcf.ca.gov/city-clerk/agenda-minutes/",
+      "enabled": true
+    },
+    "Public Works and Traffic Commission": {
+      "base_url": "https://lcf.ca.gov/city-clerk/agenda-minutes/",
+      "enabled": true
+    },
+    "Investment & Financing Advisory Committee": {
+      "base_url": "https://lcf.ca.gov/city-clerk/agenda-minutes/",
+      "enabled": true
+    },
+    "Sustainability and Resilience Commission": {
+      "base_url": "https://lcf.ca.gov/city-clerk/agenda-minutes/",
+      "enabled": true
+    },
+    "Parks and Recreation Commission": {
+      "base_url": "https://lcf.ca.gov/city-clerk/agenda-minutes/",
+      "enabled": true
+    }
+  }
+}
+

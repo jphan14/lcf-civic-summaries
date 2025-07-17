@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2025 Archive - LCF Civic Summaries</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        .ai-badge {
+            background: linear-gradient(45deg, #4f46e5, #7c3aed);
+        }
+        .historical-badge {
+            background: linear-gradient(45deg, #dc2626, #ea580c);
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="bg-white shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center py-4">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-landmark text-white"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-3xl font-bold text-gray-900">LCF Civic Summaries</h1>
+                        <p class="text-gray-600">2025 Historical Archive</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span class="text-sm text-gray-500">Last updated: <span id="last-updated">Loading...</span></span>
+                    <button onclick="window.location.reload()" class="flex items-center space-x-1 px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
+                        <i class="fas fa-sync-alt"></i>
+                        <span>Refresh</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="bg-gray-50 border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex space-x-8 py-4">
+                <a href="/" class="text-gray-600 hover:text-blue-600 font-medium pb-2 transition-colors">Current Summaries</a>
+                <a href="/archive_simple.html" class="text-blue-600 font-medium border-b-2 border-blue-600 pb-2">2025 Archive</a>
+                <a href="https://lcf.ca.gov/city-clerk/agenda-minutes/" target="_blank" class="text-gray-600 hover:text-blue-600 font-medium pb-2 transition-colors">Official Documents</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Archive Stats -->
+    <div class="gradient-bg text-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div class="text-center mb-4">
+                <h2 class="text-2xl font-bold">📚 Complete 2025 Government Archive</h2>
+                <p class="text-blue-100">Comprehensive record of all La Cañada Flintridge government activities</p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
+                <div>
+                    <div id="archive-total-docs" class="text-2xl font-bold">5</div>
+                    <div class="text-blue-100">Total Documents</div>
+                </div>
+                <div>
+                    <div id="archive-total-bodies" class="text-2xl font-bold">2</div>
+                    <div class="text-blue-100">Government Bodies</div>
+                </div>
+                <div>
+                    <div id="archive-total-months" class="text-2xl font-bold">1</div>
+                    <div class="text-blue-100">Months Covered</div>
+                </div>
+                <div>
+                    <div id="archive-ai-summaries" class="text-2xl font-bold">5</div>
+                    <div class="text-blue-100">AI Summaries</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Archive Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div id="archiveContainer">
+            <div class="text-center py-8">
+                <i class="fas fa-spinner fa-spin text-4xl text-blue-600 mb-4"></i>
+                <h3 class="text-xl font-semibold text-gray-600 mb-2">Loading historical archive...</h3>
+                <p class="text-gray-500">Please wait while we fetch the 2025 government meeting data.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white py-8 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <p>© 2025 LCF Civic Summaries. Historical archive of La Cañada Flintridge government activities.</p>
+            <p class="text-gray-400 mt-2">
+                <a href="https://lcf.ca.gov/" target="_blank" class="hover:text-white transition-colors">Official City Website</a> | 
+                <a href="https://lcf.ca.gov/city-clerk/agenda-minutes/" target="_blank" class="hover:text-white transition-colors">Official Documents</a>
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        // Simple, reliable archive data loading
+        async function loadArchiveData() {
+            try {
+                console.log('Starting to load archive data...');
+                const response = await fetch('/api/archive');
+                console.log('Response received:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                console.log('Archive data loaded:', result);
+                
+                if (result.success && result.data) {
+                    displayArchiveData(result.data);
+                    document.getElementById('last-updated').textContent = 
+                        new Date(result.last_updated).toLocaleString();
+                } else {
+                    throw new Error(result.error || 'No data available');
+                }
+            } catch (error) {
+                console.error('Error loading archive data:', error);
+                displayError(error.message);
+            }
+        }
+
+        function displayArchiveData(data) {
+            console.log('Displaying archive data:', data);
+            const container = document.getElementById('archiveContainer');
+            
+            let html = '<div class="space-y-8">';
+            
+            // June 2025 Section
+            html += `
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+                        <i class="fas fa-calendar-alt mr-3 text-blue-600"></i>
+                        June 2025
+                    </h2>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            `;
+            
+            // City Council Section
+            if (data['City Council']) {
+                html += createBodySection('City Council', data['City Council']);
+            }
+            
+            // Planning Commission Section
+            if (data['Planning Commission']) {
+                html += createBodySection('Planning Commission', data['Planning Commission']);
+            }
+            
+            html += `
+                    </div>
+                </div>
+            `;
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function createBodySection(bodyName, bodyData) {
+            let html = `
+                <div class="border-l-4 border-blue-500 pl-6">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                        <i class="fas fa-landmark mr-2 text-blue-600"></i>
+                        ${bodyName}
+                    </h3>
+            `;
+            
+            // Agendas
+            if (bodyData.agendas && bodyData.agendas.length > 0) {
+                html += `
+                    <div class="mb-6">
+                        <h4 class="text-lg font-medium text-green-700 mb-3 flex items-center">
+                            <i class="fas fa-calendar-plus mr-2"></i>
+                            Meeting Agendas (${bodyData.agendas.length})
+                        </h4>
+                        <div class="space-y-3">
+                `;
+                
+                bodyData.agendas.forEach(agenda => {
+                    html += createDocumentCard(agenda);
+                });
+                
+                html += '</div></div>';
+            }
+            
+            // Minutes
+            if (bodyData.minutes && bodyData.minutes.length > 0) {
+                html += `
+                    <div class="mb-6">
+                        <h4 class="text-lg font-medium text-blue-700 mb-3 flex items-center">
+                            <i class="fas fa-file-alt mr-2"></i>
+                            Meeting Minutes (${bodyData.minutes.length})
+                        </h4>
+                        <div class="space-y-3">
+                `;
+                
+                bodyData.minutes.forEach(minute => {
+                    html += createDocumentCard(minute);
+                });
+                
+                html += '</div></div>';
+            }
+            
+            html += '</div>';
+            return html;
+        }
+
+        function createDocumentCard(doc) {
+            const date = new Date(doc.date).toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit'
+            });
+            
+            return `
+                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 card-hover">
+                    <div class="flex justify-between items-start mb-2">
+                        <h5 class="font-medium text-gray-900">${doc.title}</h5>
+                        <div class="flex space-x-2">
+                            <span class="historical-badge text-white text-xs px-2 py-1 rounded-full">Historical</span>
+                            <span class="ai-badge text-white text-xs px-2 py-1 rounded-full">AI Summary</span>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-2">
+                        <i class="fas fa-calendar mr-1"></i>
+                        ${date}
+                    </p>
+                    <p class="text-gray-700 text-sm mb-3">${doc.summary}</p>
+                    <a href="${doc.url}" target="_blank" 
+                       class="inline-flex items-center text-blue-600 hover:text-blue-800 text-sm font-medium">
+                        <i class="fas fa-external-link-alt mr-1"></i>
+                        View Full ${doc.type === 'agenda' ? 'Agenda' : 'Meeting Minutes'} Document
+                    </a>
+                </div>
+            `;
+        }
+
+        function displayError(message) {
+            const container = document.getElementById('archiveContainer');
+            container.innerHTML = `
+                <div class="text-center py-12">
+                    <i class="fas fa-exclamation-triangle text-4xl text-red-400 mb-4"></i>
+                    <h3 class="text-xl font-semibold text-gray-600 mb-2">Unable to load archive data</h3>
+                    <p class="text-gray-500">${message}</p>
+                    <button onclick="loadArchiveData()" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+                        Try Again
+                    </button>
+                </div>
+            `;
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Page loaded, starting archive data load...');
+            loadArchiveData();
+        });
+    </script>
+</body>
+</html>
+
