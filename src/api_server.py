@@ -109,26 +109,49 @@ def detailed_health_check():
     status_code = 200 if health_status['status'] == 'healthy' else 503
     return jsonify(health_status), status_code
 
-@app.route('/api/summaries')
+@app.route('/api/summaries', methods=['GET'])
 def get_summaries():
     """Get current meeting summaries"""
     try:
-        summaries = load_json_file('website_data.json', {})
+        # Try to load from file, but provide fallback
+        summaries_file = os.path.join(config.data_dir, 'website_data.json')
         
-        # Add metadata
-        response_data = {
-            'summaries': summaries.get('summaries', []),
-            'statistics': summaries.get('statistics', {}),
-            'last_updated': summaries.get('last_updated'),
-            'total_count': len(summaries.get('summaries', []))
+        if os.path.exists(summaries_file):
+            with open(summaries_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                summaries = data.get('summaries', [])
+        else:
+            # File doesn't exist yet - return empty but valid structure
+            logger.info("No summaries file found, returning empty data")
+            summaries = []
+        
+        # Calculate statistics
+        stats = {
+            'total_documents': len(summaries),
+            'government_bodies': len(set(s.get('government_body', '') for s in summaries)),
+            'ai_summaries': len([s for s in summaries if s.get('ai_generated', False)]),
+            'recent_updates': len(summaries)  # All are recent for now
         }
         
-        logger.info(f"Served {response_data['total_count']} current summaries")
-        return jsonify(response_data)
+        response_data = {
+            'summaries': summaries,
+            'statistics': stats,
+            'last_updated': datetime.utcnow().isoformat() if summaries else None,
+            'total_count': len(summaries),
+            'status': 'file_loaded' if os.path.exists(summaries_file) else 'no_data_yet'
+        }
+        
+        logger.info(f"Served {len(summaries)} current summaries")
+        return jsonify(response_data), 200
         
     except Exception as e:
-        logger.error(f"Error serving summaries: {str(e)}")
-        return jsonify({'error': 'Failed to load summaries'}), 500
+        logger.error(f"Error getting summaries: {str(e)}")
+        return jsonify({
+            'error': str(e),
+            'summaries': [],
+            'statistics': {'total_documents': 0, 'government_bodies': 0, 'ai_summaries': 0, 'recent_updates': 0},
+            'total_count': 0
+        }), 500
 
 @app.route('/api/archive')
 def get_archive():
