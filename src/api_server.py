@@ -153,40 +153,36 @@ def get_summaries():
             'total_count': 0
         }), 500
 
-@app.route('/api/archive')
+@app.route('/api/archive', methods=['GET'])
 def get_archive():
     """Get historical archive data"""
     try:
-        archive_data = load_json_file('combined_website_data.json', {})
+        archive_file = os.path.join(config.data_dir, 'archive_data.json')
         
-        # Structure archive data by month and government body
-        archive_summaries = archive_data.get('archive_summaries', [])
-        
-        # Group by month
-        monthly_data = {}
-        for summary in archive_summaries:
-            month_key = summary.get('month', 'Unknown')
-            if month_key not in monthly_data:
-                monthly_data[month_key] = []
-            monthly_data[month_key].append(summary)
-        
-        response_data = {
-            'archive': monthly_data,
-            'statistics': {
-                'total_documents': len(archive_summaries),
-                'months_covered': len(monthly_data),
-                'government_bodies': len(set(s.get('government_body', '') for s in archive_summaries)),
-                'ai_summaries': len([s for s in archive_summaries if s.get('ai_generated', False)])
-            },
-            'last_updated': archive_data.get('last_updated')
-        }
-        
-        logger.info(f"Served archive data: {response_data['statistics']['total_documents']} documents")
-        return jsonify(response_data)
-        
+        if os.path.exists(archive_file):
+            with open(archive_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return jsonify(data), 200
+        else:
+            # Return empty archive structure
+            return jsonify({
+                'archive': {},
+                'statistics': {
+                    'total_documents': 0,
+                    'months_covered': 0,
+                    'government_bodies': 0,
+                    'ai_summaries': 0
+                },
+                'last_updated': None
+            }), 200
+            
     except Exception as e:
-        logger.error(f"Error serving archive: {str(e)}")
-        return jsonify({'error': 'Failed to load archive data'}), 500
+        logger.error(f"Error getting archive: {str(e)}")
+        return jsonify({
+            'error': str(e),
+            'archive': {},
+            'statistics': {'total_documents': 0, 'months_covered': 0, 'government_bodies': 0, 'ai_summaries': 0}
+        }), 500
 
 @app.route('/api/government-bodies', methods=['GET'])
 def get_government_bodies():
@@ -1016,38 +1012,6 @@ def add_sample_data():
             'error': str(e),
             'status': 'failed'
         }), 500
-
-@app.route('/api/archive', methods=['GET'])
-def get_archive():
-    """Get historical archive data"""
-    try:
-        archive_file = os.path.join(config.data_dir, 'archive_data.json')
-        
-        if os.path.exists(archive_file):
-            with open(archive_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                return jsonify(data), 200
-        else:
-            # Return empty archive structure
-            return jsonify({
-                'archive': {},
-                'statistics': {
-                    'total_documents': 0,
-                    'months_covered': 0,
-                    'government_bodies': 0,
-                    'ai_summaries': 0
-                },
-                'last_updated': None
-            }), 200
-            
-    except Exception as e:
-        logger.error(f"Error getting archive: {str(e)}")
-        return jsonify({
-            'error': str(e),
-            'archive': {},
-            'statistics': {'total_documents': 0, 'months_covered': 0, 'government_bodies': 0, 'ai_summaries': 0}
-        }), 500
-
 
 
 if __name__ == '__main__':
