@@ -720,6 +720,201 @@ def test_simple():
             'timestamp': datetime.utcnow().isoformat()
         }), 500
 
+@app.route('/api/process-documents', methods=['POST'])
+def process_documents():
+    """Manually trigger document processing"""
+    try:
+        logger.info("Manual document processing triggered via API")
+        
+        results = {
+            'timestamp': datetime.utcnow().isoformat(),
+            'status': 'processing',
+            'steps': {},
+            'progress': 'starting'
+        }
+        
+        # Step 1: Fetch documents
+        logger.info("Step 1: Fetching documents from La Cañada Flintridge website")
+        try:
+            from fetch_all_meetings import RailwayMeetingsFetcher
+            fetcher = RailwayMeetingsFetcher()
+            fetch_result = fetcher.fetch_all_documents()
+            
+            results['steps']['fetch'] = {
+                'status': 'completed',
+                'documents_found': len(fetch_result.get('documents', [])),
+                'message': 'Documents fetched successfully'
+            }
+            results['progress'] = 'documents_fetched'
+            
+        except Exception as e:
+            logger.error(f"Document fetching failed: {str(e)}")
+            results['steps']['fetch'] = {
+                'status': 'failed',
+                'error': str(e),
+                'message': 'Failed to fetch documents'
+            }
+            # Continue with fallback data
+        
+        # Step 2: Generate summaries
+        logger.info("Step 2: Generating AI summaries")
+        try:
+            from summarize_all_meetings import RailwaySummarizer
+            summarizer = RailwaySummarizer()
+            summary_result = summarizer.process_all_documents()
+            
+            results['steps']['summarize'] = {
+                'status': 'completed',
+                'summaries_generated': len(summary_result.get('summaries', [])),
+                'ai_enabled': bool(os.getenv('OPENAI_API_KEY')),
+                'message': 'Summaries generated successfully'
+            }
+            results['progress'] = 'summaries_generated'
+            
+        except Exception as e:
+            logger.error(f"Summary generation failed: {str(e)}")
+            results['steps']['summarize'] = {
+                'status': 'failed',
+                'error': str(e),
+                'message': 'Failed to generate summaries'
+            }
+        
+        # Step 3: Update website data
+        logger.info("Step 3: Updating website data files")
+        try:
+            from update_website_data import RailwayWebsiteUpdater
+            updater = RailwayWebsiteUpdater()
+            update_result = updater.update_all_data()
+            
+            results['steps']['update'] = {
+                'status': 'completed',
+                'files_updated': len(update_result.get('files', [])),
+                'message': 'Website data updated successfully'
+            }
+            results['progress'] = 'data_updated'
+            
+        except Exception as e:
+            logger.error(f"Data update failed: {str(e)}")
+            results['steps']['update'] = {
+                'status': 'failed',
+                'error': str(e),
+                'message': 'Failed to update website data'
+            }
+        
+        # Determine overall status
+        failed_steps = [step for step, data in results['steps'].items() if data.get('status') == 'failed']
+        
+        if not failed_steps:
+            results['status'] = 'completed'
+            results['message'] = 'All processing steps completed successfully'
+            results['progress'] = 'completed'
+        elif len(failed_steps) < len(results['steps']):
+            results['status'] = 'partial_success'
+            results['message'] = f'Processing completed with {len(failed_steps)} failed steps'
+            results['progress'] = 'completed_with_errors'
+        else:
+            results['status'] = 'failed'
+            results['message'] = 'Processing failed - all steps failed'
+            results['progress'] = 'failed'
+        
+        logger.info(f"Manual processing completed with status: {results['status']}")
+        return jsonify(results), 200 if results['status'] != 'failed' else 500
+        
+    except Exception as e:
+        logger.error(f"Manual processing execution failed: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Processing execution failed: {str(e)}',
+            'timestamp': datetime.utcnow().isoformat(),
+            'progress': 'error'
+        }), 500
+
+@app.route('/api/add-sample-data', methods=['POST'])
+def add_sample_data():
+    """Add sample meeting data for immediate testing"""
+    try:
+        logger.info("Adding sample meeting data")
+        
+        sample_summaries = [
+            {
+                "government_body": "City Council",
+                "document_type": "agenda",
+                "date": "2025-07-15",
+                "title": "City Council Meeting Agenda - July 15, 2025",
+                "summary": "Discussion of budget allocations for fiscal year 2025-2026, including proposed increases for park maintenance and public safety. Review of traffic safety measures on Foothill Boulevard and consideration of new crosswalk installations.",
+                "ai_generated": False,
+                "created_at": datetime.utcnow().isoformat(),
+                "source": "sample_data"
+            },
+            {
+                "government_body": "Planning Commission",
+                "document_type": "minutes", 
+                "date": "2025-07-10",
+                "title": "Planning Commission Minutes - July 10, 2025",
+                "summary": "Review of residential development proposal for 1234 Oak Street. Discussion of updated zoning requirements for hillside properties. Approval of design review for new commercial building on Foothill Boulevard.",
+                "ai_generated": False,
+                "created_at": datetime.utcnow().isoformat(),
+                "source": "sample_data"
+            },
+            {
+                "government_body": "Public Safety Commission",
+                "document_type": "agenda",
+                "date": "2025-07-08",
+                "title": "Public Safety Commission Agenda - July 8, 2025", 
+                "summary": "Review of emergency preparedness protocols for wildfire season. Discussion of neighborhood watch program expansion. Update on traffic enforcement statistics and pedestrian safety initiatives.",
+                "ai_generated": False,
+                "created_at": datetime.utcnow().isoformat(),
+                "source": "sample_data"
+            },
+            {
+                "government_body": "Parks & Recreation Commission",
+                "document_type": "minutes",
+                "date": "2025-07-05",
+                "title": "Parks & Recreation Commission Minutes - July 5, 2025",
+                "summary": "Planning for summer recreation programs and facility improvements. Discussion of new playground equipment for Memorial Park. Review of sports field maintenance schedule and irrigation system upgrades.",
+                "ai_generated": False,
+                "created_at": datetime.utcnow().isoformat(),
+                "source": "sample_data"
+            }
+        ]
+        
+        # Create data directory and save sample data
+        os.makedirs(config.data_dir, exist_ok=True)
+        summaries_file = os.path.join(config.data_dir, 'website_data.json')
+        
+        # Create comprehensive data structure
+        website_data = {
+            'summaries': sample_summaries,
+            'statistics': {
+                'total_documents': len(sample_summaries),
+                'government_bodies': len(set(s['government_body'] for s in sample_summaries)),
+                'ai_summaries': len([s for s in sample_summaries if s.get('ai_generated', False)]),
+                'recent_updates': len(sample_summaries)
+            },
+            'last_updated': datetime.utcnow().isoformat(),
+            'data_source': 'sample_data'
+        }
+        
+        with open(summaries_file, 'w', encoding='utf-8') as f:
+            json.dump(website_data, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"Sample data saved: {len(sample_summaries)} summaries")
+        
+        return jsonify({
+            'message': 'Sample data added successfully',
+            'summaries_added': len(sample_summaries),
+            'file_created': summaries_file,
+            'status': 'success'
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Failed to add sample data: {str(e)}")
+        return jsonify({
+            'error': str(e),
+            'status': 'failed'
+        }), 500
+
+
 if __name__ == '__main__':
     logger.info(f"Starting LCF Civic Summaries API Server on port {config.port}")
     logger.info(f"Environment: {config.environment}")
