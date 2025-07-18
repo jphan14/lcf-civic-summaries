@@ -165,34 +165,40 @@ def get_archive():
         logger.error(f"Error serving archive: {str(e)}")
         return jsonify({'error': 'Failed to load archive data'}), 500
 
-@app.route('/api/government-bodies')
+@app.route('/api/government-bodies', methods=['GET'])
 def get_government_bodies():
-    """Get list of government bodies being tracked"""
+    """Get list of all government bodies being tracked"""
     try:
-        summaries = load_json_file('website_data.json', {})
-        archive_data = load_json_file('combined_website_data.json', {})
+        # Static list of La Cañada Flintridge government bodies
+        government_bodies = [
+            "City Council",
+            "Planning Commission",
+            "Public Safety Commission",
+            "Parks & Recreation Commission", 
+            "Design Review Board",
+            "Environmental Commission",
+            "Traffic & Safety Commission",
+            "Investment & Financing Advisory Committee"
+        ]
         
-        # Extract unique government bodies
-        current_bodies = set()
-        for summary in summaries.get('summaries', []):
-            current_bodies.add(summary.get('government_body', ''))
-        
-        archive_bodies = set()
-        for summary in archive_data.get('archive_summaries', []):
-            archive_bodies.add(summary.get('government_body', ''))
-        
-        all_bodies = sorted(list(current_bodies.union(archive_bodies)))
+        logger.info(f"Returning {len(government_bodies)} government bodies")
         
         return jsonify({
-            'government_bodies': all_bodies,
-            'current_count': len(current_bodies),
-            'archive_count': len(archive_bodies),
-            'total_count': len(all_bodies)
-        })
+            'government_bodies': government_bodies,
+            'current_count': len(government_bodies),
+            'archive_count': len(government_bodies),
+            'total_count': len(government_bodies),
+            'last_updated': datetime.utcnow().isoformat(),
+            'status': 'static_data'
+        }), 200
         
     except Exception as e:
-        logger.error(f"Error serving government bodies: {str(e)}")
-        return jsonify({'error': 'Failed to load government bodies'}), 500
+        logger.error(f"Error getting government bodies: {str(e)}")
+        return jsonify({
+            'error': str(e),
+            'government_bodies': [],
+            'total_count': 0
+        }), 500
 
 @app.route('/api/search')
 def search_summaries():
