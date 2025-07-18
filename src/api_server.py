@@ -1188,6 +1188,174 @@ def fetch_real_documents():
             'timestamp': datetime.utcnow().isoformat()
         }), 500
 
+@app.route('/api/test-website-access', methods=['GET'])
+def test_website_access():
+    """Test if we can access the LCF website"""
+    try:
+        import requests
+        
+        test_results = {
+            'timestamp': datetime.utcnow().isoformat(),
+            'tests': {}
+        }
+        
+        # Test main website
+        try:
+            response = requests.get('https://www.lcf.ca.gov', timeout=10 )
+            test_results['tests']['main_website'] = {
+                'status': 'success' if response.status_code == 200 else 'failed',
+                'status_code': response.status_code,
+                'accessible': True
+            }
+        except Exception as e:
+            test_results['tests']['main_website'] = {
+                'status': 'failed',
+                'error': str(e),
+                'accessible': False
+            }
+        
+        # Test agendas page
+        try:
+            response = requests.get('https://www.lcf.ca.gov/government/agendas-minutes', timeout=10 )
+            test_results['tests']['agendas_page'] = {
+                'status': 'success' if response.status_code == 200 else 'failed',
+                'status_code': response.status_code,
+                'accessible': True
+            }
+        except Exception as e:
+            test_results['tests']['agendas_page'] = {
+                'status': 'failed',
+                'error': str(e),
+                'accessible': False
+            }
+        
+        return jsonify(test_results), 200
+        
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'timestamp': datetime.utcnow().isoformat()
+        }), 500
+
+@app.route('/api/generate-ai-summaries', methods=['POST'])
+def generate_ai_summaries():
+    """Generate AI summaries for existing documents"""
+    try:
+        logger.info("Generating AI summaries for existing documents")
+        
+        # Check if OpenAI is configured
+        openai_key = os.getenv('OPENAI_API_KEY')
+        if not openai_key:
+            return jsonify({
+                'error': 'OpenAI API key not configured',
+                'status': 'failed'
+            }), 400
+        
+        # Load existing documents
+        summaries_file = os.path.join(config.data_dir, 'website_data.json')
+        if not os.path.exists(summaries_file):
+            return jsonify({
+                'error': 'No documents found to summarize',
+                'status': 'failed'
+            }), 404
+        
+        with open(summaries_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        documents = data.get('summaries', [])
+        if not documents:
+            return jsonify({
+                'error': 'No documents in data file',
+                'status': 'failed'
+            }), 404
+        
+        # Generate AI summaries
+        import openai
+        client = openai.OpenAI(api_key=openai_key)
+        
+        processed_docs = []
+        ai_count = 0
+        
+        for doc in documents:
+            try:
+                # Create a prompt for summarization
+                content = doc.get('content', '')
+                title = doc.get('title', 'Meeting Document')
+                gov_body = doc.get('government_body', 'Government Body')
+                
+                if content and not content.startswith('Mock'):
+                    # Real content - generate AI summary
+                    prompt = f"""
+                    Please provide a concise summary of this {gov_body} document titled "{title}":
+                    
+                    {content[:2000]}  # Limit content length
+                    
+                    Focus on key decisions, discussions, and action items. Keep the summary to 2-3 sentences.
+                    """
+                    
+                    response = client.chat.completions.create(
+                        model=os.getenv('OPENAI_MODEL', 'gpt-3.5-turbo'),
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=int(os.getenv('MAX_TOKENS', '150')),
+                        temperature=0.3
+                    )
+                    
+                    ai_summary = response.choices[0].message.content.strip()
+                    
+                    # Add AI summary to document
+                    doc['summary'] = ai_summary
+                    doc['ai_generated'] = True
+                    ai_count += 1
+                    
+                else:
+                    # Mock content - create a basic summary
+                    doc['summary'] = f"Meeting document for {gov_body}. Content not available for detailed analysis."
+                    doc['ai_generated'] = False
+                
+                processed_docs.append(doc)
+                
+            except Exception as e:
+                logger.error(f"Failed to generate summary for {doc.get('title', 'unknown')}: {str(e)}")
+                # Keep original document without summary
+                doc['summary'] = f"Summary generation failed: {str(e)}"
+                doc['ai_generated'] = False
+                processed_docs.append(doc)
+        
+        # Update statistics
+        updated_data = {
+            'summaries': processed_docs,
+            'statistics': {
+                'total_documents': len(processed_docs),
+                'government_bodies': len(set(doc.get('government_body', '') for doc in processed_docs)),
+                'ai_summaries': ai_count,
+                'recent_updates': len(processed_docs)
+            },
+            'last_updated': datetime.utcnow().isoformat(),
+            'data_source': 'ai_enhanced_documents'
+        }
+        
+        # Save updated data
+        with open(summaries_file, 'w', encoding='utf-8') as f:
+            json.dump(updated_data, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"Generated {ai_count} AI summaries")
+        
+        return jsonify({
+            'status': 'completed',
+            'documents_processed': len(processed_docs),
+            'ai_summaries_generated': ai_count,
+            'message': f'Successfully generated {ai_count} AI summaries',
+            'timestamp': datetime.utcnow().isoformat()
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"AI summary generation failed: {str(e)}")
+        return jsonify({
+            'error': str(e),
+            'status': 'failed',
+            'timestamp': datetime.utcnow().isoformat()
+        }), 500
+
 
 if __name__ == '__main__':
     logger.info(f"Starting LCF Civic Summaries API Server on port {config.port}")
