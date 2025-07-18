@@ -1013,6 +1013,181 @@ def add_sample_data():
             'status': 'failed'
         }), 500
 
+@app.route('/api/check-modules', methods=['GET'])
+def check_modules():
+    """Check what processing modules are available"""
+    try:
+        module_status = {
+            'timestamp': datetime.utcnow().isoformat(),
+            'modules': {}
+        }
+        
+        # Check fetch_all_meetings module
+        try:
+            import fetch_all_meetings
+            module_status['modules']['fetch_all_meetings'] = {
+                'status': 'available',
+                'classes': dir(fetch_all_meetings),
+                'has_fetcher': hasattr(fetch_all_meetings, 'RailwayMeetingsFetcher')
+            }
+        except ImportError as e:
+            module_status['modules']['fetch_all_meetings'] = {
+                'status': 'missing',
+                'error': str(e)
+            }
+        
+        # Check summarize_all_meetings module
+        try:
+            import summarize_all_meetings
+            module_status['modules']['summarize_all_meetings'] = {
+                'status': 'available',
+                'classes': dir(summarize_all_meetings),
+                'has_summarizer': hasattr(summarize_all_meetings, 'RailwaySummarizer')
+            }
+        except ImportError as e:
+            module_status['modules']['summarize_all_meetings'] = {
+                'status': 'missing',
+                'error': str(e)
+            }
+        
+        # Check environment
+        module_status['environment'] = {
+            'openai_configured': bool(os.getenv('OPENAI_API_KEY')),
+            'data_dir': config.data_dir,
+            'data_dir_exists': os.path.exists(config.data_dir)
+        }
+        
+        return jsonify(module_status), 200
+        
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'timestamp': datetime.utcnow().isoformat()
+        }), 500
+
+@app.route('/api/fetch-real-documents', methods=['POST'])
+def fetch_real_documents():
+    """Try to fetch real documents from La Cañada Flintridge website"""
+    try:
+        logger.info("Attempting to fetch real documents from LCF website")
+        
+        results = {
+            'timestamp': datetime.utcnow().isoformat(),
+            'status': 'processing',
+            'steps': {}
+        }
+        
+        # Step 1: Try to fetch real documents
+        try:
+            # Import the actual fetcher
+            from fetch_all_meetings import RailwayMeetingsFetcher
+            
+            logger.info("Initializing document fetcher")
+            fetcher = RailwayMeetingsFetcher()
+            
+            logger.info("Calling fetch_all_documents method")
+            fetch_result = fetcher.fetch_all_documents()
+            
+            results['steps']['fetch'] = {
+                'status': 'completed',
+                'method_called': 'fetch_all_documents',
+                'result_type': type(fetch_result).__name__,
+                'result_keys': list(fetch_result.keys()) if isinstance(fetch_result, dict) else 'not_dict',
+                'documents_found': len(fetch_result.get('documents', [])) if isinstance(fetch_result, dict) else 'unknown'
+            }
+            
+            # If we got documents, try to process them
+            if isinstance(fetch_result, dict) and 'documents' in fetch_result:
+                documents = fetch_result['documents']
+                
+                if documents:
+                    # Process with AI if available
+                    if os.getenv('OPENAI_API_KEY'):
+                        try:
+                            from summarize_all_meetings import RailwaySummarizer
+                            summarizer = RailwaySummarizer()
+                            summary_result = summarizer.process_all_documents()
+                            
+                            results['steps']['summarize'] = {
+                                'status': 'completed',
+                                'summaries_generated': len(summary_result.get('summaries', [])) if isinstance(summary_result, dict) else 'unknown'
+                            }
+                        except Exception as e:
+                            results['steps']['summarize'] = {
+                                'status': 'failed',
+                                'error': str(e)
+                            }
+                    
+                    # Save the real data
+                    os.makedirs(config.data_dir, exist_ok=True)
+                    summaries_file = os.path.join(config.data_dir, 'website_data.json')
+                    
+                    # Create proper data structure
+                    website_data = {
+                        'summaries': documents,
+                        'statistics': {
+                            'total_documents': len(documents),
+                            'government_bodies': len(set(doc.get('government_body', '') for doc in documents)),
+                            'ai_summaries': len([doc for doc in documents if doc.get('ai_generated', False)]),
+                            'recent_updates': len(documents)
+                        },
+                        'last_updated': datetime.utcnow().isoformat(),
+                        'data_source': 'real_documents'
+                    }
+                    
+                    with open(summaries_file, 'w', encoding='utf-8') as f:
+                        json.dump(website_data, f, indent=2, ensure_ascii=False)
+                    
+                    results['steps']['save'] = {
+                        'status': 'completed',
+                        'file_saved': summaries_file,
+                        'documents_saved': len(documents)
+                    }
+                    
+                    results['status'] = 'completed'
+                    results['message'] = f'Successfully fetched and processed {len(documents)} real documents'
+                else:
+                    results['status'] = 'no_documents'
+                    results['message'] = 'Fetcher ran but found no documents'
+            else:
+                results['status'] = 'unexpected_result'
+                results['message'] = 'Fetcher returned unexpected result format'
+                
+        except ImportError as e:
+            results['steps']['fetch'] = {
+                'status': 'failed',
+                'error': f'Import error: {str(e)}',
+                'message': 'Document fetcher module not available'
+            }
+            results['status'] = 'module_missing'
+            
+        except AttributeError as e:
+            results['steps']['fetch'] = {
+                'status': 'failed',
+                'error': f'Method error: {str(e)}',
+                'message': 'Document fetcher method not found'
+            }
+            results['status'] = 'method_missing'
+            
+        except Exception as e:
+            results['steps']['fetch'] = {
+                'status': 'failed',
+                'error': str(e),
+                'message': 'Document fetching failed'
+            }
+            results['status'] = 'fetch_failed'
+        
+        logger.info(f"Real document fetch completed with status: {results['status']}")
+        return jsonify(results), 200
+        
+    except Exception as e:
+        logger.error(f"Real document fetch execution failed: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Fetch execution failed: {str(e)}',
+            'timestamp': datetime.utcnow().isoformat()
+        }), 500
+
 
 if __name__ == '__main__':
     logger.info(f"Starting LCF Civic Summaries API Server on port {config.port}")
